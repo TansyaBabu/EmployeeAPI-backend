@@ -3,6 +3,7 @@
     using System.Data;
     using Microsoft.Data.SqlClient;
     using EmployeeAPI.Model;
+    using BCrypt.Net;
 
     public class EmployeeService
     {
@@ -17,11 +18,10 @@
         public Employee Login(string username, string password)
         {
             using SqlConnection con = new SqlConnection(_conn);
-            using SqlCommand cmd = new SqlCommand("sp_LoginUser", con);
-            cmd.CommandType = CommandType.StoredProcedure;
+            using SqlCommand cmd = new SqlCommand(
+                "SELECT * FROM Employees WHERE Username=@Username", con);
 
             cmd.Parameters.AddWithValue("@Username", username);
-            cmd.Parameters.AddWithValue("@Password", password);
 
             con.Open();
             using SqlDataReader reader = cmd.ExecuteReader();
@@ -29,7 +29,15 @@
             if (!reader.Read())
                 return null;
 
-            var user = new Employee
+            string storedHash = reader["Password"].ToString();
+
+            if (string.IsNullOrEmpty(storedHash) || !storedHash.StartsWith("$2"))
+                return null;
+
+            if (!BCrypt.Verify(password, storedHash))
+                return null;
+
+            return new Employee
             {
                 EmployeeId = Convert.ToInt32(reader["EmployeeId"]),
                 Name = reader["Name"].ToString(),
@@ -39,24 +47,22 @@
                 Skillset = reader["Skillset"].ToString(),
                 Address = reader["Address"]?.ToString(),
                 JoiningDate = Convert.ToDateTime(reader["JoiningDate"]),
-                ProfileImage = reader["ProfileImage"]?.ToString(),
+
+                // ✅ Convert byte[] → Base64
+                ProfileImageBase64 = reader["ProfileImage"] == DBNull.Value
+                    ? null
+                    : Convert.ToBase64String((byte[])reader["ProfileImage"]),
+
                 Role = reader["Role"].ToString(),
                 Status = reader["Status"].ToString()
             };
-
-            // 🚫 Block inactive user
-            if (user.Status != "Active")
-            {
-                user.Role = "InactiveUser";  // special flag for controller
-            }
-
-            return user;
         }
 
-        // REGISTER
+        // 🔐 REGISTER
         public bool Register(Employee emp)
         {
             emp.Status = "Active";
+            emp.Password = BCrypt.HashPassword(emp.Password);
 
             using SqlConnection con = new SqlConnection(_conn);
             using SqlCommand cmd = new SqlCommand("sp_RegisterEmployee", con);
@@ -72,13 +78,15 @@
             cmd.Parameters.AddWithValue("@Password", emp.Password);
             cmd.Parameters.AddWithValue("@Role", emp.Role);
             cmd.Parameters.AddWithValue("@CreatedBy", emp.CreatedBy ?? "system");
-            cmd.Parameters.AddWithValue("@ProfileImage", emp.ProfileImage ?? (object)DBNull.Value);
+
+            cmd.Parameters.Add("@ProfileImage", SqlDbType.VarBinary)
+                .Value = emp.ProfileImageBytes ?? (object)DBNull.Value;
 
             con.Open();
             return cmd.ExecuteNonQuery() > 0;
         }
 
-        // GET ALL
+        // ✅ GET ALL EMPLOYEES
         public List<Employee> GetAllEmployees()
         {
             List<Employee> list = new List<Employee>();
@@ -102,6 +110,12 @@
                     Skillset = reader["Skillset"].ToString(),
                     Address = reader["Address"].ToString(),
                     JoiningDate = Convert.ToDateTime(reader["JoiningDate"]),
+
+                    // ✅ Convert byte[] → Base64
+                    ProfileImageBase64 = reader["ProfileImage"] == DBNull.Value
+                        ? null
+                        : Convert.ToBase64String((byte[])reader["ProfileImage"]),
+
                     Role = reader["Role"].ToString(),
                     Status = reader["Status"].ToString()
                 });
@@ -110,11 +124,12 @@
             return list;
         }
 
-        // GET BY ID
+        // ✅ GET BY ID
         public Employee GetEmployeeById(int id)
         {
             using SqlConnection con = new SqlConnection(_conn);
-            using SqlCommand cmd = new SqlCommand("SELECT * FROM Employees WHERE EmployeeId=@Id", con);
+            using SqlCommand cmd = new SqlCommand(
+                "SELECT * FROM Employees WHERE EmployeeId=@Id", con);
 
             cmd.Parameters.AddWithValue("@Id", id);
 
@@ -134,11 +149,16 @@
                 Skillset = reader["Skillset"].ToString(),
                 Username = reader["Username"].ToString(),
                 Status = reader["Status"].ToString(),
-                Role = reader["Role"].ToString()
+                Role = reader["Role"].ToString(),
+
+                // ✅ Convert byte[] → Base64
+                ProfileImageBase64 = reader["ProfileImage"] == DBNull.Value
+                    ? null
+                    : Convert.ToBase64String((byte[])reader["ProfileImage"])
             };
         }
 
-        // UPDATE
+        // ✅ UPDATE
         public bool UpdateEmployee(Employee emp)
         {
             using SqlConnection con = new SqlConnection(_conn);
@@ -155,6 +175,9 @@
             cmd.Parameters.AddWithValue("@Status", emp.Status);
             cmd.Parameters.AddWithValue("@Role", emp.Role);
             cmd.Parameters.AddWithValue("@ModifiedBy", emp.ModifiedBy ?? "system");
+
+            cmd.Parameters.Add("@ProfileImage", SqlDbType.VarBinary)
+                .Value = emp.ProfileImageBytes ?? (object)DBNull.Value;
 
             con.Open();
             return cmd.ExecuteNonQuery() > 0;

@@ -5,7 +5,7 @@
     using EmployeeAPI.Model;
     using EmployeeAPI.Services;
 
-    [Authorize]   // All endpoints require login
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class EmployeeController : ControllerBase
@@ -37,10 +37,17 @@
             return Ok(emp);
         }
 
-        // 👤 Allow Employee + Admin
+        // 🔥 MODIFY HERE
         [HttpPut("update")]
         public IActionResult Update([FromBody] Employee emp)
         {
+            // 🔥 Convert Base64 → byte[]
+            if (!string.IsNullOrEmpty(emp.ProfileImageBase64))
+            {
+                emp.ProfileImageBytes =
+                    Convert.FromBase64String(emp.ProfileImageBase64);
+            }
+
             bool updated = _service.UpdateEmployee(emp);
 
             if (!updated)
@@ -48,6 +55,7 @@
 
             return Ok(new { message = "Employee updated successfully" });
         }
+
 
         // 🔐 ADMIN ONLY
         [Authorize(Roles = "Admin")]

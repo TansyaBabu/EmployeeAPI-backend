@@ -7,7 +7,6 @@ using EmployeeAPI.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(c =>
@@ -18,7 +17,6 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1"
     });
 
-    // 🔐 Swagger JWT Support
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -55,9 +53,11 @@ builder.Services.AddCors(options =>
     });
 });
 
-// 🔐 JWT Configuration
 var jwtSettings = builder.Configuration.GetSection("Jwt");
-var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]);
+var jwtKey = jwtSettings["Key"]
+    ?? throw new Exception("JWT Key is missing in appsettings.json");
+
+var key = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(options =>
 {
@@ -89,16 +89,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-// ✅ Static files FIRST
 app.UseStaticFiles();
-
 app.UseCors("AllowAll");
-
-// 🔐 IMPORTANT: Authentication BEFORE Authorization
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();

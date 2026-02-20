@@ -27,6 +27,8 @@
         public string? CreatedBy { get; set; }
 
         public string? ModifiedBy { get; set; }
-        public string? ProfileImage { get; set; }
+        public byte[]? ProfileImageBytes { get; set; }
+        public string? ProfileImageBase64 { get; set; }
+
     }
 }

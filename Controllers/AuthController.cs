@@ -1,8 +1,8 @@
 ﻿namespace EmployeeAPI.Controllers
 {
     using Microsoft.AspNetCore.Mvc;
-    using EmployeeAPI.Model;
-    using EmployeeAPI.Services;
+    using EmployeeAPI.Model;          // ✅ FIXED
+    using EmployeeAPI.Services;       // ✅ FIXED
     using Microsoft.Extensions.Configuration;
     using Microsoft.IdentityModel.Tokens;
     using System.IdentityModel.Tokens.Jwt;
@@ -22,7 +22,6 @@
             _configuration = configuration;
         }
 
-        // 🔐 POST: api/auth/login
         [HttpPost("login")]
         public IActionResult Login([FromBody] LoginRequest req)
         {
@@ -31,15 +30,12 @@
 
             var user = _service.Login(req.Username, req.Password);
 
-            // ❌ Wrong credentials
             if (user == null)
                 return Unauthorized(new { message = "Invalid username or password" });
 
-            // 🚫 Block inactive users
             if (user.Status != "Active")
                 return StatusCode(403, new { message = "Your account is inactive. Please contact admin." });
 
-            // 🔐 Create Claims
             var claims = new[]
             {
                 new Claim(ClaimTypes.NameIdentifier, user.EmployeeId.ToString()),
@@ -49,8 +45,11 @@
 
             var jwtSettings = _configuration.GetSection("Jwt");
 
+            var jwtKey = jwtSettings["Key"]
+                ?? throw new Exception("JWT Key missing in appsettings.json");
+
             var key = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtSettings["Key"])
+                Encoding.UTF8.GetBytes(jwtKey)
             );
 
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -88,7 +87,6 @@
             });
         }
 
-        // POST: api/auth/register
         [HttpPost("register")]
         public IActionResult Register([FromBody] Employee emp)
         {
